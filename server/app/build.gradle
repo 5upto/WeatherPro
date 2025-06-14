@@ -1,0 +1,36 @@
+plugins {
+    id 'application'
+    id 'java'
+}
+
+group 'com.weatherpro'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'io.vertx:vertx-core:4.4.6'
+    implementation 'io.vertx:vertx-web:4.4.6'
+    implementation 'io.vertx:vertx-web-client:4.4.6'
+    implementation 'io.vertx:vertx-mysql-client:4.4.6'
+    implementation 'io.vertx:vertx-sql-client:4.4.6'
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'io.vertx:vertx-junit5:4.4.6'
+}
+
+application {
+    mainClass = 'weatherpro.App'
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
