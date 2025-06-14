@@ -74,21 +74,43 @@ WeatherPro/
 
 The backend is built using Vert.x, a high-performance reactive framework for the JVM. It's built with Gradle as the build system and runs on port 8080 by default.
 
-### API Endpoints
+### API Integration
 
-#### Authentication APIs
+#### OpenWeatherMap API
+WeatherPro uses the OpenWeatherMap API to fetch weather data. The application makes use of the following OpenWeatherMap endpoints:
+
+1. **Current Weather**
+   - Endpoint: `https://api.openweathermap.org/data/2.5/weather`
+   - Parameters:
+     - `q`: Location name
+     - `appid`: API key
+     - `units`: Metric (°C)
+   - Returns: Current weather conditions including temperature, humidity, wind, etc.
+
+2. **5-Day Forecast**
+   - Endpoint: `https://api.openweathermap.org/data/2.5/forecast`
+   - Parameters:
+     - `lat`: Latitude
+     - `lon`: Longitude
+     - `appid`: API key
+     - `units`: Metric (°C)
+   - Returns: 5-day weather forecast with 3-hour intervals
+
+### Backend API Endpoints
+
+#### Authentication
 
 1. **Login**
    - `POST /api/auth/login`
-   - Body: { "username": "string", "password": "string" }
+   - Body: { "username": string, "password": string }
    - Returns: { "success": boolean, "user_id": string, "token": string }
 
 2. **Register**
    - `POST /api/auth/register`
-   - Body: { "username": "string", "email": "string", "password": "string" }
+   - Body: { "username": string, "email": string, "password": string }
    - Returns: { "success": boolean, "message": string }
 
-#### Location Management APIs
+#### Location Management
 
 1. **Save Location**
    - `POST /api/locations/save`
@@ -99,7 +121,7 @@ The backend is built using Vert.x, a high-performance reactive framework for the
    - `GET /api/locations/{user_id}`
    - Returns: { "success": boolean, "locations": array }
 
-#### Weather Alert APIs
+#### Weather Alerts
 
 1. **Create Alert**
    - `POST /api/alerts/create`
