@@ -46,11 +46,21 @@ The application will be available at `http://localhost:8501`
 
 ```
 WeatherPro/
-├── ui/
-│   └── app.py           # Main Streamlit application
-├── requirements.txt     # Python dependencies
-├── README.md           # Project documentation
-└── screenshots/        # Application screenshots
+├── ui/                 # Frontend Application
+│   └── app.py         
+├── server/            # Backend Application
+│   ├── app/         
+│   │   ├── src/      
+│   │   │   └── main/
+│   │   │       └── java/
+│   │   │           └── com/weatherpro/
+│   │   │               └── WeatherProApplication.java
+│   │   └── build.gradle configuration
+│   ├── gradle/      
+│   └── gradlew     
+├── requirements.txt   # Python dependencies
+├── README.md         # Project documentation
+└── screenshots/      # Application screenshots
 ```
 
 ## Screenshots
