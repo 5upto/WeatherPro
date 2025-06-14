@@ -59,7 +59,7 @@ WeatherPro/
 ![Current Weather](screenshots/current.png)
 ![Weather Forecast](screenshots/hourfore.png)
 ![5-Day Forecast ](screenshots/forecast.png)
-![alert](screenshots/alert.png)
+![Alert](screenshots/alert.png)
 
 ## Technologies Used
 
@@ -76,52 +76,43 @@ The backend is built using Vert.x, a high-performance reactive framework for the
 
 ### API Endpoints
 
-#### Weather APIs
-
-1. **Current Weather**
-   - `GET /api/weather/current`
-   - Parameters: `city` (required), `units` (optional)
-   - Returns: Current weather conditions for a city
-
-2. **Weather Forecast**
-   - `GET /api/weather/forecast`
-   - Parameters: `city` (required), `days` (optional, default=5)
-   - Returns: 5-day weather forecast
-
-3. **Historical Weather**
-   - `GET /api/weather/historical`
-   - Parameters: `city` (required), `start_date`, `end_date`
-   - Returns: Historical weather data for a date range
-
-4. **Weather Statistics**
-   - `GET /api/weather/stats`
-   - Parameters: `city` (required), `period` (day/week/month)
-   - Returns: Weather statistics for the specified period
-
 #### Authentication APIs
 
 1. **Login**
    - `POST /api/auth/login`
    - Body: { "username": "string", "password": "string" }
-   - Returns: JWT token
+   - Returns: { "success": boolean, "user_id": string, "token": string }
 
 2. **Register**
    - `POST /api/auth/register`
    - Body: { "username": "string", "email": "string", "password": "string" }
-   - Returns: Registration confirmation
+   - Returns: { "success": boolean, "message": string }
 
-3. **Refresh Token**
-   - `POST /api/auth/refresh`
-   - Headers: { "Authorization": "Bearer <refresh_token>" }
-   - Returns: New access token
+#### Location Management APIs
+
+1. **Save Location**
+   - `POST /api/locations/save`
+   - Body: { "user_id": string, "location": string, "display_name": string }
+   - Returns: { "success": boolean, "message": string }
+
+2. **Get User Locations**
+   - `GET /api/locations/{user_id}`
+   - Returns: { "success": boolean, "locations": array }
+
+#### Weather Alert APIs
+
+1. **Create Alert**
+   - `POST /api/alerts/create`
+   - Body: { "user_id": string, "location": string, "alert_type": string, "condition": string, "threshold": number }
+   - Returns: { "success": boolean, "message": string }
 
 ### API Response Format
 
 All API responses follow this format:
 ```json
 {
-  "status": "success/error",
-  "message": "Description of result",
+  "success": boolean,
+  "message": string,
   "data": { /* API-specific data */ }
 }
 ```
