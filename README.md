@@ -37,7 +37,7 @@ A modern weather application built with Streamlit that provides real-time weathe
 1. Start the backend server (if not already running)
 2. Run the Streamlit app:
    ```bash
-   streamlit run ui/app.py
+   streamlit run client/app.py
    ```
 
 The application will be available at `http://localhost:8501`
@@ -46,7 +46,7 @@ The application will be available at `http://localhost:8501`
 
 ```
 WeatherPro/
-├── ui/                 # Frontend Application
+├── client/                 # Frontend Application
 │   └── app.py         
 ├── server/            # Backend Application
 │   ├── app/         
