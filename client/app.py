@@ -6,8 +6,9 @@ from datetime import datetime, timedelta
 import plotly.graph_objects as go
 import plotly.express as px
 from typing import Dict, List, Optional
+import streamlit_js_eval
+from math import radians, cos, sin, asin, sqrt
 
-# Configuration
 BACKEND_URL = "http://localhost:8080"
 OPENWEATHER_API_KEY = "ebb2b4f6eb7080ef10582240d598fdb7"
 
@@ -53,76 +54,119 @@ class WeatherApp:
     def login_page(self):
         """User login/registration page"""
         st.title("🌤️ WeatherPro - Personal Weather Dashboard")
-        
+
         tab1, tab2 = st.tabs(["Login", "Register"])
-        
+
         with tab1:
             st.subheader("Login to Your Account")
-            username = st.text_input("Username", key="login_username")
-            password = st.text_input("Password", type="password", key="login_password")
-            
-            if st.button("Login", key="login_btn"):
-                if username and password:
-                    response = self.make_request("/api/auth/login", "POST", {
-                        "username": username,
-                        "password": password
-                    })
-                    if response and response.get("success"):
-                        st.session_state.logged_in = True
-                        st.session_state.user_id = response.get("user_id")
-                        st.session_state.username = username
-                        st.success("Login successful!")
-                        st.rerun()
-                    else:
-                        st.error("Invalid credentials")
-                else:
-                    st.error("Please fill in all fields")
-        
-        with tab2:
-            st.subheader("Create New Account")
-            reg_username = st.text_input("Username", key="reg_username")
-            reg_email = st.text_input("Email", key="reg_email")
-            reg_password = st.text_input("Password", type="password", key="reg_password")
-            reg_confirm = st.text_input("Confirm Password", type="password", key="reg_confirm")
-            
-            if st.button("Register", key="register_btn"):
-                if reg_username and reg_email and reg_password and reg_confirm:
-                    if reg_password == reg_confirm:
-                        response = self.make_request("/api/auth/register", "POST", {
-                            "username": reg_username,
-                            "email": reg_email,
-                            "password": reg_password
+            col = st.columns([2, 3, 2])[1]  # Center column
+            with col:
+                username = st.text_input("Username", key="login_username")
+                password = st.text_input("Password", type="password", key="login_password")
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("Login", key="login_btn"):
+                    if username and password:
+                        response = self.make_request("/api/auth/login", "POST", {
+                            "username": username,
+                            "password": password
                         })
                         if response and response.get("success"):
-                            st.success("Registration successful! Please login.")
+                            st.session_state.logged_in = True
+                            st.session_state.user_id = response.get("user_id")
+                            st.session_state.username = username
+                            st.success("Login successful!")
+                            st.rerun()
                         else:
-                            st.error("Registration failed")
+                            st.error("Invalid credentials")
                     else:
-                        st.error("Passwords don't match")
-                else:
-                    st.error("Please fill in all fields")
+                        st.error("Please fill in all fields")
+
+        with tab2:
+            st.subheader("Create New Account")
+            col = st.columns([2, 3, 2])[1]  # Center column
+            with col:
+                reg_username = st.text_input("Username", key="reg_username")
+                reg_email = st.text_input("Email", key="reg_email")
+                reg_password = st.text_input("Password", type="password", key="reg_password")
+                reg_confirm = st.text_input("Confirm Password", type="password", key="reg_confirm")
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("Register", key="register_btn"):
+                    if reg_username and reg_email and reg_password and reg_confirm:
+                        if reg_password == reg_confirm:
+                            response = self.make_request("/api/auth/register", "POST", {
+                                "username": reg_username,
+                                "email": reg_email,
+                                "password": reg_password
+                            })
+                            if response and response.get("success"):
+                                st.success("Registration successful! Please login.")
+                            else:
+                                st.error("Registration failed")
+                        else:
+                            st.error("Passwords don't match")
+                    else:
+                        st.error("Please fill in all fields")
     
+    def get_user_location(self):
+        """Get user's current location using browser geolocation and store in session_state"""
+        if "user_lat" in st.session_state and "user_lon" in st.session_state:
+            return st.session_state.user_lat, st.session_state.user_lon
+
+        loc = streamlit_js_eval.get_geolocation()
+        if loc and loc.get("coords"):
+            st.session_state.user_lat = loc["coords"]["latitude"]
+            st.session_state.user_lon = loc["coords"]["longitude"]
+            return st.session_state.user_lat, st.session_state.user_lon
+        return None, None
+
     def get_weather_data(self, location: str) -> Optional[Dict]:
-        """Fetch weather data from OpenWeather API (Free tier compatible)"""
+        """Fetch weather data using Geocoding API, biasing by user location if available"""
         try:
-            # Current weather (Free tier)
-            current_url = f"https://api.openweathermap.org/data/2.5/weather?q={location}&appid={OPENWEATHER_API_KEY}&units=metric"
-            current_response = requests.get(current_url)
-            
-            if current_response.status_code != 200:
-                st.error(f"Weather data not found for {location}")
+        # get user location
+            user_lat, user_lon = self.get_user_location()
+        # geocode the location name
+            geo_url = (
+                f"http://api.openweathermap.org/geo/1.0/direct?q={location}&limit=5&appid={OPENWEATHER_API_KEY}"
+            )
+            geo_response = requests.get(geo_url)
+            geo_data = geo_response.json()
+            if geo_response.status_code != 200 or not geo_data:
+                st.error(f"Location '{location}' not found. Please enter a valid city name.")
                 return None
-            
+
+        # pick the closest result
+            if user_lat is not None and user_lon is not None:
+                def distance(lat1, lon1, lat2, lon2):
+                    # haversine formula
+                    dlat = radians(lat2 - lat1)
+                    dlon = radians(lon2 - lon1)
+                    a = sin(dlat/2)**2 + cos(radians(lat1)) * cos(radians(lat2)) * sin(dlon/2)**2
+                    c = 2 * asin(sqrt(a))
+                    r = 6371
+                    return c * r
+                closest = min(
+                    geo_data,
+                    key=lambda loc: distance(user_lat, user_lon, loc['lat'], loc['lon'])
+                )
+                selected = closest
+            else:
+                selected = geo_data[0]
+
+            lat, lon = selected['lat'], selected['lon']
+            display_name = f"{selected['name']}, {selected.get('state', '')}, {selected['country']}".replace(" ,", "")
+
+        # current weather
+            current_url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric"
+            current_response = requests.get(current_url)
+            if current_response.status_code != 200:
+                st.error(f"Weather data not found for {display_name}")
+                return None
             current_data = current_response.json()
-            
-            # Get coordinates for forecast
-            lat, lon = current_data['coord']['lat'], current_data['coord']['lon']
-            
-            # 5-day forecast (Free tier)
+
+        # 5-day forecast
             forecast_url = f"https://api.openweathermap.org/data/2.5/forecast?lat={lat}&lon={lon}&appid={OPENWEATHER_API_KEY}&units=metric"
             forecast_response = requests.get(forecast_url)
-            
-            # Structure data to match expected format
+
             weather_data = {
                 "current": {
                     "temp": current_data.get("main", {}).get("temp", 0),
@@ -136,18 +180,18 @@ class WeatherApp:
                     "sunrise": current_data.get("sys", {}).get("sunrise", 0),
                     "sunset": current_data.get("sys", {}).get("sunset", 0),
                     "weather": current_data.get("weather", [{}])
-                }
+                },
+                "lat": lat,
+                "lon": lon
             }
-            
-            # Add forecast data if available
+
+        # forecast data if available
             if forecast_response.status_code == 200:
                 forecast_data = forecast_response.json()
                 weather_data["hourly"] = forecast_data.get("list", [])
-                
-                # Process daily forecast from hourly data
+
                 daily_forecasts = []
                 processed_dates = set()
-                
                 for item in forecast_data.get("list", []):
                     date = datetime.fromtimestamp(item["dt"]).date()
                     if date not in processed_dates and len(daily_forecasts) < 5:
@@ -160,11 +204,12 @@ class WeatherApp:
                             "weather": item["weather"]
                         })
                         processed_dates.add(date)
-                
                 weather_data["daily"] = daily_forecasts
-            
+
+            weather_data["display_name"] = display_name
+
             return weather_data
-            
+        
         except Exception as e:
             st.error(f"Error fetching weather data: {str(e)}")
             return None
@@ -223,15 +268,24 @@ class WeatherApp:
     def display_weather_card(self, weather_data: Dict, location_name: str):
         """Display weather information in a card format"""
         current = weather_data.get('current', {})
-        
+        lat = weather_data.get('lat')
+        lon = weather_data.get('lon')
+
         col1, col2, col3 = st.columns([2, 1, 1])
-        
+
         with col1:
-            st.subheader(f"📍 {location_name}")
+            # tooltip to the location marker
+            if lat is not None and lon is not None:
+                st.markdown(
+                    f"""<span title="Lat: {lat}, Lon: {lon}">📍</span> <b>{location_name}</b>""",
+                    unsafe_allow_html=True
+                )
+            else:
+                st.subheader(f"📍 {location_name}")
             temp = current.get('temp', 0)
             feels_like = current.get('feels_like', 0)
             description = current.get('weather', [{}])[0].get('description', '').title()
-            
+
             st.markdown(f"""
             ### 🌡️ {temp:.1f}°C
             **Feels like:** {feels_like:.1f}°C  
@@ -260,7 +314,7 @@ class WeatherApp:
             **👁️ Visibility:** {visibility:.1f} km
             """)
         
-        # Sun times
+        # sun times
         if current.get('sunrise', 0) > 0 and current.get('sunset', 0) > 0:
             sunrise = datetime.fromtimestamp(current.get('sunrise', 0))
             sunset = datetime.fromtimestamp(current.get('sunset', 0))
@@ -275,7 +329,7 @@ class WeatherApp:
         """Display and manage weather alerts"""
         st.subheader("⚠️ Weather Alerts")
         
-        # Add new alert
+        # add new alert
         with st.expander("Add New Alert"):
             if st.session_state.saved_locations:
                 alert_location = st.selectbox(
@@ -306,7 +360,7 @@ class WeatherApp:
             else:
                 st.info("Please save some locations first to create alerts.")
         
-        # Display active alerts
+        # display active alerts
         alerts_response = self.make_request(f"/api/alerts/{st.session_state.user_id}")
         if alerts_response:
             alerts = alerts_response.get("alerts", [])
@@ -331,32 +385,40 @@ class WeatherApp:
     def main_dashboard(self):
         """Main weather dashboard"""
         st.title(f"🌤️ Welcome back, {st.session_state.username}!")
-        
-        # Sidebar for navigation and settings
+    
+        # sidebar for navigation and settings
         with st.sidebar:
             st.subheader("⚙️ Settings")
-            
-            # Load saved locations
+        
+        # load saved locations
             self.load_saved_locations()
-            
-            # Location search
+        
+        # location search
             st.subheader("🔍 Search Location")
             search_location = st.text_input("Enter city name")
-            if st.button("Get Weather"):
+            get_weather_clicked = st.button("Get Weather")
+        
+        # always try to get user location (will prompt once)
+            user_lat, user_lon = self.get_user_location()
+        
+            if get_weather_clicked:
                 if search_location:
+                    if user_lat is None or user_lon is None:
+                        st.info("Requesting your location... Please allow location access and click 'Get Weather' again.")
+                        st.stop()
                     with st.spinner("Fetching weather data..."):
                         weather_data = self.get_weather_data(search_location)
                         if weather_data:
                             st.session_state.current_weather = weather_data
-                            st.session_state.current_location = search_location
-                            st.success(f"Weather data loaded for {search_location}")
+                            st.session_state.current_location = weather_data.get("display_name", search_location)
+                            st.success(f"Weather data loaded for {st.session_state.current_location}")
             
-            # Save current location
+            # save current location
             if st.button("💾 Save Current Location"):
                 if hasattr(st.session_state, 'current_location'):
                     self.save_location(st.session_state.current_location)
             
-            # Saved locations
+            # saved locations
             st.subheader("📌 Saved Locations")
             if st.session_state.saved_locations:
                 for i, location in enumerate(st.session_state.saved_locations):
@@ -376,14 +438,14 @@ class WeatherApp:
             else:
                 st.info("No saved locations yet")
             
-            # Logout
+            # logout
             if st.button("🚪 Logout"):
                 st.session_state.logged_in = False
                 st.session_state.user_id = None
                 st.session_state.username = None
                 st.rerun()
         
-        # Main content area
+        # main content area
         tabs = st.tabs(["🌦️ Current Weather", "📈 Forecast", "⚠️ Alerts"])
         
         with tabs[0]:
@@ -504,7 +566,6 @@ class WeatherApp:
         else:
             self.main_dashboard()
 
-# Run the application
 if __name__ == "__main__":
     app = WeatherApp()
     app.run()

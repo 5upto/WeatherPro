@@ -41,7 +41,7 @@ public class App extends AbstractVerticle {
                 .setHost("localhost")
                 .setDatabase("weatherpro")
                 .setUser("root")
-                .setPassword("1234");
+                .setPassword("Feluda@007");
 
         PoolOptions poolOptions = new PoolOptions()
                 .setMaxSize(5);
