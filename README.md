@@ -47,18 +47,18 @@ The application will be available at `http://localhost:8501`
 ```
 WeatherPro/
 ├── client/                 # Frontend Application
-│   └── app.py         
+│   ├── app.py
+│   └── requirements.txt   # Python dependencies         
 ├── server/            # Backend Application
 │   ├── app/         
 │   │   ├── src/      
 │   │   │   └── main/
 │   │   │       └── java/
 │   │   │           └── com/weatherpro/
-│   │   │               └── WeatherProApplication.java
+│   │   │               └── App.java
 │   │   └── build.gradle configuration
 │   ├── gradle/      
 │   └── gradlew     
-├── requirements.txt   # Python dependencies
 ├── README.md         # Project documentation
 └── screenshots/      # Application screenshots
 ```
@@ -70,6 +70,8 @@ WeatherPro/
 ![Weather Forecast](screenshots/hourfore.png)
 ![5-Day Forecast ](screenshots/forecast.png)
 ![Alert](screenshots/alert.png)
+![Lat-Lon](screenshots/latlon.png)
+
 
 ## Technologies Used
 
