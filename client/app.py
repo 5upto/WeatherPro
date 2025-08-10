@@ -9,7 +9,7 @@ from typing import Dict, List, Optional
 import streamlit_js_eval
 from math import radians, cos, sin, asin, sqrt
 
-BACKEND_URL = "http://localhost:8080"
+BACKEND_URL = "https://weatherpro-prb8.onrender.com"
 OPENWEATHER_API_KEY = "ebb2b4f6eb7080ef10582240d598fdb7"
 
 class WeatherApp:
