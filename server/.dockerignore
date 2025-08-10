@@ -1,0 +1,21 @@
+# Gradle
+.gradle/
+**/build/
+!app/build.gradle
+
+# IDE
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Node (if any front-end alongside)
+node_modules/

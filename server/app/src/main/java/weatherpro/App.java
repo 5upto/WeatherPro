@@ -36,8 +36,12 @@ public class App extends AbstractVerticle {
     public void start(Promise<Void> startPromise) throws Exception {
 
         // Initialize PostgreSQL client (Neon)
-        // Using provided connection URI with ssl requirements
-        String pgUri = "postgresql://neondb_owner:npg_bWzxLFj2oU9t@ep-hidden-star-af7mhvar-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
+        // Read connection URI from environment to avoid hardcoding secrets
+        String pgUri = System.getenv("POSTGRES_URI");
+        if (pgUri == null || pgUri.isBlank()) {
+            startPromise.fail("Missing POSTGRES_URI environment variable");
+            return;
+        }
         PgConnectOptions connectOptions = PgConnectOptions.fromUri(pgUri);
 
         PoolOptions poolOptions = new PoolOptions()
