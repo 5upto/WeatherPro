@@ -12,8 +12,8 @@ import io.vertx.ext.web.RoutingContext;
 import io.vertx.ext.web.handler.BodyHandler;
 import io.vertx.ext.web.handler.CorsHandler;
 import io.vertx.ext.web.client.WebClient;
-import io.vertx.mysqlclient.MySQLConnectOptions;
-import io.vertx.mysqlclient.MySQLPool;
+ import io.vertx.pgclient.PgConnectOptions;
+ import io.vertx.pgclient.PgPool;
 import io.vertx.sqlclient.PoolOptions;
 import io.vertx.sqlclient.Row;
 import io.vertx.sqlclient.RowSet;
@@ -27,7 +27,7 @@ import java.util.Set;
 
 public class App extends AbstractVerticle {
 
-    private MySQLPool client;
+    private PgPool client;
     private WebClient webClient;
     private static final String OPENWEATHER_API_KEY = "ebb2b4f6eb7080ef10582240d598fdb7";
     private static final String OPENWEATHER_BASE_URL = "https://api.openweathermap.org/data/2.5";
@@ -35,18 +35,15 @@ public class App extends AbstractVerticle {
     @Override
     public void start(Promise<Void> startPromise) throws Exception {
 
-        // Initialize MySQL client
-        MySQLConnectOptions connectOptions = new MySQLConnectOptions()
-                .setPort(3306)
-                .setHost("localhost")
-                .setDatabase("weatherpro")
-                .setUser("root")
-                .setPassword("Feluda@007");
+        // Initialize PostgreSQL client (Neon)
+        // Using provided connection URI with ssl requirements
+        String pgUri = "postgresql://neondb_owner:npg_bWzxLFj2oU9t@ep-hidden-star-af7mhvar-pooler.c-2.us-west-2.aws.neon.tech/neondb?sslmode=require&channel_binding=require";
+        PgConnectOptions connectOptions = PgConnectOptions.fromUri(pgUri);
 
         PoolOptions poolOptions = new PoolOptions()
                 .setMaxSize(5);
 
-        client = MySQLPool.pool(vertx, connectOptions, poolOptions);
+        client = PgPool.pool(vertx, connectOptions, poolOptions);
         webClient = WebClient.create(vertx);
 
         // Initialize database tables
@@ -58,7 +55,7 @@ public class App extends AbstractVerticle {
     private Future<Void> initializeDatabase() {
         return client.query("""
             CREATE TABLE IF NOT EXISTS users (
-                id INT AUTO_INCREMENT PRIMARY KEY,
+                id SERIAL PRIMARY KEY,
                 username VARCHAR(50) UNIQUE NOT NULL,
                 email VARCHAR(100) UNIQUE NOT NULL,
                 password_hash VARCHAR(255) NOT NULL,
@@ -67,40 +64,39 @@ public class App extends AbstractVerticle {
         """).execute()
                 .compose(v -> client.query("""
             CREATE TABLE IF NOT EXISTS user_locations (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT,
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER,
                 location VARCHAR(100) NOT NULL,
                 display_name VARCHAR(100) NOT NULL,
-                latitude DECIMAL(10, 8),
-                longitude DECIMAL(11, 8),
+                latitude NUMERIC(10, 8),
+                longitude NUMERIC(11, 8),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                CONSTRAINT fk_user_locations_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         """).execute())
                 .compose(v -> client.query("""
             CREATE TABLE IF NOT EXISTS weather_alerts (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                user_id INT,
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER,
                 location VARCHAR(100) NOT NULL,
                 alert_type VARCHAR(20) NOT NULL,
                 condition_type VARCHAR(10) NOT NULL,
-                threshold_value DECIMAL(10, 2) NOT NULL,
+                threshold_value NUMERIC(10, 2) NOT NULL,
                 is_active BOOLEAN DEFAULT TRUE,
                 last_triggered TIMESTAMP NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+                CONSTRAINT fk_weather_alerts_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             )
         """).execute())
                 .compose(v -> client.query("""
             CREATE TABLE IF NOT EXISTS weather_cache (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                location VARCHAR(100) NOT NULL,
-                weather_data JSON NOT NULL,
-                cached_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                INDEX location_idx (location),
-                INDEX time_idx (cached_at)
+                id SERIAL PRIMARY KEY,
+                location VARCHAR(100) UNIQUE NOT NULL,
+                weather_data JSONB NOT NULL,
+                cached_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """).execute())
+                .compose(v -> client.query("CREATE INDEX IF NOT EXISTS weather_cache_time_idx ON weather_cache (cached_at)").execute())
                 .mapEmpty();
     }
 
@@ -171,7 +167,7 @@ public class App extends AbstractVerticle {
 
         String passwordHash = hashPassword(password);
 
-        client.preparedQuery("INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)")
+        client.preparedQuery("INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3)")
                 .execute(Tuple.of(username, email, passwordHash))
                 .onSuccess(result -> {
                     ctx.response()
@@ -192,7 +188,7 @@ public class App extends AbstractVerticle {
 
         String passwordHash = hashPassword(password);
 
-        client.preparedQuery("SELECT id, username FROM users WHERE username = ? AND password_hash = ?")
+        client.preparedQuery("SELECT id, username FROM users WHERE username = $1 AND password_hash = $2")
                 .execute(Tuple.of(username, passwordHash))
                 .onSuccess(result -> {
                     if (result.size() > 0) {
@@ -221,7 +217,7 @@ public class App extends AbstractVerticle {
         String location = ctx.pathParam("location");
 
         // Check cache first
-        client.preparedQuery("SELECT weather_data FROM weather_cache WHERE location = ? AND cached_at > DATE_SUB(NOW(), INTERVAL 10 MINUTE)")
+        client.preparedQuery("SELECT weather_data FROM weather_cache WHERE location = $1 AND cached_at > (NOW() - interval '10 minutes')")
                 .execute(Tuple.of(location))
                 .onSuccess(result -> {
                     if (result.size() > 0) {
@@ -264,8 +260,10 @@ public class App extends AbstractVerticle {
                                         JsonObject detailedData = detailedResponse.bodyAsJsonObject();
 
                                         // Cache the data
-                                        client.preparedQuery("INSERT INTO weather_cache (location, weather_data) VALUES (?, ?) ON DUPLICATE KEY UPDATE weather_data = ?, cached_at = NOW()")
-                                                .execute(Tuple.of(location, detailedData.encode(), detailedData.encode()));
+                                        client.preparedQuery(
+                                                "INSERT INTO weather_cache (location, weather_data) VALUES ($1, $2::jsonb) " +
+                                                "ON CONFLICT (location) DO UPDATE SET weather_data = EXCLUDED.weather_data, cached_at = NOW()")
+                                                .execute(Tuple.of(location, detailedData.encode()));
 
                                         // Check for triggered alerts
                                         checkWeatherAlerts(location, detailedData);
@@ -304,7 +302,7 @@ public class App extends AbstractVerticle {
         String displayName = body.getString("display_name");
 
         // First check if user already has 5 locations
-        client.preparedQuery("SELECT COUNT(*) as count FROM user_locations WHERE user_id = ?")
+        client.preparedQuery("SELECT COUNT(*)::int as count FROM user_locations WHERE user_id = $1")
                 .execute(Tuple.of(userId))
                 .onSuccess(result -> {
                     Row row = result.iterator().next();
@@ -328,7 +326,7 @@ public class App extends AbstractVerticle {
                                     double lat = weatherData.getJsonObject("coord").getDouble("lat");
                                     double lon = weatherData.getJsonObject("coord").getDouble("lon");
 
-                                    client.preparedQuery("INSERT INTO user_locations (user_id, location, display_name, latitude, longitude) VALUES (?, ?, ?, ?, ?)")
+                                    client.preparedQuery("INSERT INTO user_locations (user_id, location, display_name, latitude, longitude) VALUES ($1, $2, $3, $4, $5)")
                                             .execute(Tuple.of(userId, location, displayName, lat, lon))
                                             .onSuccess(insertResult -> {
                                                 ctx.response()
@@ -363,7 +361,7 @@ public class App extends AbstractVerticle {
         String userIdStr = ctx.pathParam("userId");
         int userId = Integer.parseInt(userIdStr);
 
-        client.preparedQuery("SELECT id, location, display_name, latitude, longitude FROM user_locations WHERE user_id = ? ORDER BY created_at DESC")
+        client.preparedQuery("SELECT id, location, display_name, latitude, longitude FROM user_locations WHERE user_id = $1 ORDER BY created_at DESC")
                 .execute(Tuple.of(userId))
                 .onSuccess(result -> {
                     JsonArray locations = new JsonArray();
@@ -392,7 +390,7 @@ public class App extends AbstractVerticle {
         String locationIdStr = ctx.pathParam("locationId");
         int locationId = Integer.parseInt(locationIdStr);
 
-        client.preparedQuery("DELETE FROM user_locations WHERE id = ?")
+        client.preparedQuery("DELETE FROM user_locations WHERE id = $1")
                 .execute(Tuple.of(locationId))
                 .onSuccess(result -> {
                     ctx.response()
@@ -414,7 +412,7 @@ public class App extends AbstractVerticle {
         String condition = body.getString("condition");
         double threshold = body.getDouble("threshold");
 
-        client.preparedQuery("INSERT INTO weather_alerts (user_id, location, alert_type, condition_type, threshold_value) VALUES (?, ?, ?, ?, ?)")
+        client.preparedQuery("INSERT INTO weather_alerts (user_id, location, alert_type, condition_type, threshold_value) VALUES ($1, $2, $3, $4, $5)")
                 .execute(Tuple.of(userId, location, alertType, condition, threshold))
                 .onSuccess(result -> {
                     ctx.response()
@@ -432,7 +430,7 @@ public class App extends AbstractVerticle {
         String userIdStr = ctx.pathParam("userId");
         int userId = Integer.parseInt(userIdStr);
 
-        client.preparedQuery("SELECT id, location, alert_type, condition_type, threshold_value, is_active, last_triggered FROM weather_alerts WHERE user_id = ? AND is_active = TRUE ORDER BY created_at DESC")
+        client.preparedQuery("SELECT id, location, alert_type, condition_type, threshold_value, is_active, last_triggered FROM weather_alerts WHERE user_id = $1 AND is_active = TRUE ORDER BY created_at DESC")
                 .execute(Tuple.of(userId))
                 .onSuccess(result -> {
                     JsonArray alerts = new JsonArray();
@@ -462,7 +460,7 @@ public class App extends AbstractVerticle {
         String alertIdStr = ctx.pathParam("alertId");
         int alertId = Integer.parseInt(alertIdStr);
 
-        client.preparedQuery("UPDATE weather_alerts SET is_active = FALSE WHERE id = ?")
+        client.preparedQuery("UPDATE weather_alerts SET is_active = FALSE WHERE id = $1")
                 .execute(Tuple.of(alertId))
                 .onSuccess(result -> {
                     ctx.response()
@@ -477,7 +475,7 @@ public class App extends AbstractVerticle {
     }
 
     private void checkWeatherAlerts(String location, JsonObject weatherData) {
-        client.preparedQuery("SELECT id, user_id, alert_type, condition_type, threshold_value FROM weather_alerts WHERE location = ? AND is_active = TRUE")
+        client.preparedQuery("SELECT id, user_id, alert_type, condition_type, threshold_value FROM weather_alerts WHERE location = $1 AND is_active = TRUE")
                 .execute(Tuple.of(location))
                 .onSuccess(result -> {
                     JsonObject current = weatherData.getJsonObject("current");
@@ -514,7 +512,7 @@ public class App extends AbstractVerticle {
                         }
 
                         if (shouldTrigger) {
-                            client.preparedQuery("UPDATE weather_alerts SET last_triggered = NOW() WHERE id = ?")
+                            client.preparedQuery("UPDATE weather_alerts SET last_triggered = NOW() WHERE id = $1")
                                     .execute(Tuple.of(alertId));
 
                             // Here you could add notification logic (email, push notifications, etc.)
@@ -539,9 +537,9 @@ public class App extends AbstractVerticle {
     public static void main(String[] args) {
         Vertx vertx = Vertx.vertx();
         vertx.deployVerticle(new App())
-                .onSuccess(id -> System.out.println("WeatherPro Backend deployed successfully"))
+                .onSuccess(id -> System.out.println("Server started successfully"))
                 .onFailure(err -> {
-                    System.err.println("Failed to deploy WeatherPro Backend: " + err.getMessage());
+                    System.err.println("Failed to start server: " + err.getMessage());
                     err.printStackTrace();
                 });
     }

@@ -14,8 +14,11 @@ dependencies {
     implementation 'io.vertx:vertx-core:4.4.6'
     implementation 'io.vertx:vertx-web:4.4.6'
     implementation 'io.vertx:vertx-web-client:4.4.6'
-    implementation 'io.vertx:vertx-mysql-client:4.4.6'
+    implementation 'io.vertx:vertx-pg-client:4.4.6'
     implementation 'io.vertx:vertx-sql-client:4.4.6'
+    // SCRAM support for channel binding (required by Neon URI)
+    implementation 'com.ongres.scram:client:2.1'
+    implementation 'com.ongres.scram:common:2.1'
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'io.vertx:vertx-junit5:4.4.6'
